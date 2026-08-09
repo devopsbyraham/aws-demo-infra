@@ -1,0 +1,31 @@
+#gh auth login
+#gh api repos/devopsbyraham/aws-demo-infra \
+  --jq '.owner.login, .owner.id, .name, .id'
+
+
+#UPDATE THE VALUES IN  TRUST POLICY
+/*
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "GitHubActionsOIDC",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::944551807923:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": "repo:devopsbyraham@OWNER_ID/aws-demo-infra@REPO_ID:ref:refs/heads/main"
+        }
+      }
+    }
+  ]
+}
+
+*/
