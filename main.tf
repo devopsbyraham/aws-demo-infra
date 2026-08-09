@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "example" {
-  bucket = "my-bucket-from-github009"
+  bucket = "my-bucktghb-github009-demo"
 
   tags = {
     Environment = "Dev"
