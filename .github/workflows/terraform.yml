@@ -1,22 +1,29 @@
-name: Terraform CI
+name: Terraform CI/CD
 
 on:
   push:
+    branches:
+      - main
+  pull_request:
     branches:
       - main
   workflow_dispatch:
 
 permissions:
   contents: read
+  id-token: write
+  pull-requests: write
 
 env:
   AWS_REGION: ap-south-1
+  TF_VERSION: 1.9.8
 
 jobs:
-  terraform:
+  terraform-plan:
     runs-on: ubuntu-latest
-
-
+    outputs:
+      plan-status: ${{ steps.plan.outcome }}
+    
     steps:
       - uses: actions/checkout@v4
 
@@ -24,12 +31,12 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ARN }}
-          aws-region: ap-south-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.9.8
+          terraform_version: ${{ env.TF_VERSION }}
 
       - name: Terraform Version
         run: terraform version
@@ -38,14 +45,58 @@ jobs:
         run: terraform init
 
       - name: Terraform Format
-        run: terraform fmt -check
+        run: terraform fmt -check -recursive
 
       - name: Terraform Validate
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -out=tfplan
+        id: plan
+        run: terraform plan -out=tfplan -no-color
+
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ github.run_id }}
+          path: tfplan
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Comment PR with Plan
+        if: github.event_name == 'push' && steps.plan.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **Terraform Plan** completed successfully. Review changes before merge.'
+            })
+
+      - name: Comment PR with Plan Error
+        if: github.event_name == 'push' && steps.plan.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Terraform Plan** failed. Check logs for details.'
+            })
 
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
-        run: terraform apply -auto-approve tfplan
+        id: apply
+        run: terraform apply -no-color -auto-approve tfplan
+        continue-on-error: true
+
+      - name: Apply Success Notification
+        if: steps.apply.outcome == 'success'
+        run: echo "✅ Terraform apply completed successfully on ${{ github.ref }}"
+
+      - name: Apply Failure Notification
+        if: steps.apply.outcome == 'failure'
+        run: |
+          echo "❌ Terraform apply failed!"
+          exit 1
